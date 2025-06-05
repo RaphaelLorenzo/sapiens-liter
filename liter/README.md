@@ -6,6 +6,17 @@
 # Installation
 
 ```
-conda create --name sapiens-liter python=3.10
-conda activate sapiens-liter
+conda create --name sapiens_liter python=3.10
+conda activate sapiens_liter
+pip install torch torchvision torchaudio opencv-python tqdm json-tricks ultralytics 
+```
+
+Download the checkpoints and set : 
+
+# Pose estimation
+
+Will run with the test images and the default 0.3b model.
+
+```
+python run_pose.py
 ```
