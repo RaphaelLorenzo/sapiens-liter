@@ -14,3 +14,6 @@ __pycache__/
 *.DS_Store
 *._*
 *.egg
+lite/sapiens_lite_host/*
+lite/demo
+lite/demo/vis_pose.py

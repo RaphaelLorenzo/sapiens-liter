@@ -108,6 +108,14 @@ We finetune sapiens for multiple human-centric vision tasks. Please checkout the
 - ### [Depth Estimation](docs/DEPTH_README.md) <sup><small><a href="lite/docs/DEPTH_README.md" style="color: #FFA500;">[lite]</a></small></sup>
 - ### [Surface Normal Estimation](docs/NORMAL_README.md) <sup><small><a href="lite/docs/NORMAL_README.md" style="color: #FFA500;">[lite]</a></small></sup>
 
+## 🌟 Even liter (but a bit slower)
+No scripts, no mmdet, no multiprocessing
+Ultralytics for detections and half precision inference.
+
+- ###  [Liter](liter/README.md) <sup><small><a href="lite/docs/PRETRAIN_README.md" style="color: #FFA500;">[lite]</a></small></sup>
+
+
+
 ## 🎯 Easy Steps to Finetuning Sapiens
 Finetuning our models is super-easy! Here is a detailed training guide for the following tasks.
 - ### [Pose Estimation](docs/finetune/POSE_README.md)
