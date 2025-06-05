@@ -11,7 +11,11 @@ conda activate sapiens_liter
 pip install torch torchvision torchaudio opencv-python tqdm json-tricks ultralytics 
 ```
 
-Download the checkpoints and set : 
+Download the checkpoints and set the path :
+
+```
+export SAPIENS_LITE_CHECKPOINT_ROOT=/home/yourself/SAPIENS_CHECKPOINT_DIR/
+```
 
 # Pose estimation
 
