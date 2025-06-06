@@ -36,30 +36,89 @@ from tqdm import tqdm
 
 from ultralytics import YOLO
 
+from torchvision.transforms.functional import crop
+from torchvision.transforms.functional import resize
+from PIL import Image
+
+
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.functional")
 warnings.filterwarnings("ignore", category=UserWarning, module="json_tricks.encoders")
 
 
-def preprocess_pose(orig_img, bboxes_list, input_shape, mean, std):
+def crop_resize_and_normalize(orig_img, bboxes_list, input_shape, mean, std, draw_boxes = True, show_bboxes = False):
     """Preprocess pose images and bboxes."""
     preprocessed_images = []
-    centers = []
-    scales = []
-    for bbox in bboxes_list:
-        img, center, scale = top_down_affine_transform(orig_img.copy(), bbox)
-        img = cv2.resize(
-            img, (input_shape[1], input_shape[0]), interpolation=cv2.INTER_LINEAR
-        ).transpose(2, 0, 1)
-        img = torch.from_numpy(img)
-        img = img[[2, 1, 0], ...].float()
+    extended_padded_bboxes = []
+    # cropped_images = []
+    # Create a new element for each box
+
+    for bbox in bboxes_list:    
+            
+        # Set the padding ratio
+        pad_ratio = 1.25
+        desired_aspect_ratio = input_shape[1] / input_shape[0] # width / height of the model
+
+        # Calculate the padded bbox
+        x_center = (bbox[0] + bbox[2]) / 2
+        y_center = (bbox[1] + bbox[3]) / 2
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        padded_box_width = width * pad_ratio
+        padded_box_height = height * pad_ratio
+        padded_bbox = np.array([x_center - (padded_box_width / 2), y_center - (padded_box_height / 2), x_center + (padded_box_width / 2), y_center + (padded_box_height / 2)])
+        
+        # Calculate the extended padded bbox with the desired aspect ratio
+        if (padded_box_width / padded_box_height) > desired_aspect_ratio:
+            extended_padded_box_height = padded_box_width / desired_aspect_ratio
+            extended_padded_box_width = padded_box_width
+        else:
+            extended_padded_box_width = padded_box_height * desired_aspect_ratio
+            extended_padded_box_height = padded_box_height
+            
+        extended_padded_bbox = np.array([x_center - (extended_padded_box_width / 2), y_center - (extended_padded_box_height / 2), x_center + (extended_padded_box_width / 2), y_center + (extended_padded_box_height / 2)])
+        
+        # Store the extended padded bbox
+        extended_padded_bboxes.append(extended_padded_bbox)
+        
+        # Crop, resize and normalize the image
+        orig_img_tensor = torch.from_numpy(orig_img).permute(2, 0, 1) # C, H, W
+        cropped_img = crop(orig_img_tensor, int(extended_padded_bbox[1]), int(extended_padded_bbox[0]), int(extended_padded_bbox[3] - extended_padded_bbox[1]), int(extended_padded_bbox[2] - extended_padded_bbox[0])) # shape: (C, H, W)
+        cropped_img_resized = resize(cropped_img, (input_shape[0], input_shape[1]), interpolation=Image.BILINEAR) # shape: (C, H, W)
+        cropped_img_resized = cropped_img_resized.float()
         mean = torch.Tensor(mean).view(-1, 1, 1)
         std = torch.Tensor(std).view(-1, 1, 1)
-        img = (img - mean) / std
-        preprocessed_images.append(img)
-        centers.extend(center)
-        scales.extend(scale)
-    return preprocessed_images, centers, scales
+        cropped_img_resized = (cropped_img_resized - mean) / std
+        
+        # Store the preprocessed image
+        preprocessed_images.append(cropped_img_resized)
+        
+        # Draw the bboxes on the image and show it
+        if draw_boxes or show_bboxes:
+            cv2.rectangle(orig_img, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 0, 255), 2)
+            cv2.putText(orig_img, "original bbox", (int(bbox[0]), int(bbox[1]-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            cv2.rectangle(orig_img, (int(padded_bbox[0]), int(padded_bbox[1])), (int(padded_bbox[2]), int(padded_bbox[3])), (0, 255, 255), 2)
+            cv2.putText(orig_img, "padded bbox", (int(padded_bbox[0]), int(padded_bbox[1]-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+            cv2.rectangle(orig_img, (int(extended_padded_bbox[0]), int(extended_padded_bbox[1])), (int(extended_padded_bbox[2]), int(extended_padded_bbox[3])), (0, 255, 0), 2)
+            cv2.putText(orig_img, "padded bbox with desired ratio", (int(extended_padded_bbox[0]), int(extended_padded_bbox[1]+20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            cropped_img_resized_np = cropped_img_resized.numpy().transpose(1, 2, 0)
+
+            if show_bboxes:
+                cv2.imshow("Image with bboxes (type any key to continue)", orig_img)        
+                key = cv2.waitKey(0)
+                # if key == ord('q') or key == 27:
+                #     exit()
+                cv2.destroyAllWindows()
+                
+                cv2.imshow("Cropped, resized and normalized image (type any key to continue)", cropped_img_resized_np)
+                key = cv2.waitKey(0)
+                # if key == ord('q') or key == 27:
+                #     exit()
+                cv2.destroyAllWindows()
+
+        
+    return preprocessed_images, extended_padded_bboxes
 
 
 def batch_inference_topdown(
@@ -84,16 +143,14 @@ def batch_inference_topdown(
     return heatmaps.float().cpu()
 
 
-def img_save_and_vis(
+def save_pose_results(
     img, results, output_path, input_shape, heatmap_scale, kpt_colors, kpt_thr, radius, skeleton_info, thickness
 ):
     
-    # TODO : clarify and simplify this function
-    
+        
     # pred_instances_list = split_instances(result)
     heatmap = results["heatmaps"]
-    centres = results["centres"]
-    scales = results["scales"]
+    extended_padded_bboxes = results["extended_padded_bboxes"]
     has_dets = results["has_dets"]
     img_shape = img.shape
     instance_keypoints = []
@@ -107,7 +164,14 @@ def img_save_and_vis(
         )
 
         keypoints, keypoint_scores = result
-        keypoints = (keypoints / input_shape) * scales[i] + centres[i] - 0.5 * scales[i]
+        
+        # remap keypoints to their image coordinates
+        image_bbox = extended_padded_bboxes[i] # xmin, ymin, xmax, ymax in original image coordinates
+        image_bbox_width = image_bbox[2] - image_bbox[0]
+        image_bbox_height = image_bbox[3] - image_bbox[1]
+        bbox_size = np.array([image_bbox_width, image_bbox_height])
+        
+        keypoints = (keypoints / input_shape) * bbox_size + image_bbox[:2]
         
         instance_keypoints.append(keypoints[0])
         
@@ -284,7 +348,6 @@ def main(args, model_path):
 
     
     ### Run the inference ###
-    
     for batch_idx, (batch_image_name, batch_orig_imgs, batch_imgs) in tqdm(
         enumerate(inference_dataloader), total=len(inference_dataloader)
     ):
@@ -326,13 +389,12 @@ def main(args, model_path):
                 has_dets.append(True)
                 
         ### Preprocess the images for the inference ###
-        pose_imgs, pose_img_centers, pose_img_scales = [], [], []
+        pose_imgs, pose_imgs_extended_padded_bboxes = [], []
         for k in range(len(bboxes_batch)):
-            preprocessed_images, centers, scales = preprocess_pose(batch_orig_imgs[k].numpy(), bboxes_batch[k], (input_shape[1], input_shape[2]), [123.5, 116.5, 103.5], [58.5, 57.0, 57.5])
+            preprocessed_images, extended_padded_bboxes = crop_resize_and_normalize(batch_orig_imgs[k].numpy(), bboxes_batch[k], (input_shape[1], input_shape[2]), [123.5, 116.5, 103.5], [58.5, 57.0, 57.5])
                         
             pose_imgs.extend(preprocessed_images)
-            pose_img_centers.extend(centers)
-            pose_img_scales.extend(scales)
+            pose_imgs_extended_padded_bboxes.extend(extended_padded_bboxes)
 
 
         ### Compute the number of batches to run for the inference, because of the multiple detections in each sample ###
@@ -347,16 +409,6 @@ def main(args, model_path):
                 pose_imgs[i * args.batch_size : (i + 1) * args.batch_size], dim=0
             )
             
-            # if True:
-            #     print("imgs for inference", imgs.shape)
-            #     np_image = imgs.cpu().numpy().transpose(0, 2, 3, 1)
-            #     print("np_image", np_image.shape, np_image.mean(), np_image.std(), np_image.max(), np_image.min(), np_image.dtype)
-
-            #     cv2.imshow("np_image", np_image[0])
-            #     key = cv2.waitKey(0)
-            #     if key == ord('q') or key == 27:
-            #         exit()
-            
             valid_len = len(imgs)
             imgs = fake_pad_images_to_batchsize(imgs, args.batch_size)
             
@@ -368,15 +420,13 @@ def main(args, model_path):
         for idx, (_, bbox_len) in enumerate(img_bbox_map.items()):
             result = {
                 "heatmaps": pose_results[:bbox_len].copy(),
-                "centres": pose_img_centers[:bbox_len].copy(),
-                "scales": pose_img_scales[:bbox_len].copy(),
+                "extended_padded_bboxes": pose_imgs_extended_padded_bboxes[:bbox_len].copy(),
                 "has_dets": has_dets[idx]
             }
             batched_results.append(result)
             del (
                 pose_results[:bbox_len],
-                pose_img_centers[:bbox_len],
-                pose_img_scales[:bbox_len],
+                pose_imgs_extended_padded_bboxes[:bbox_len],
             )
 
         assert len(batched_results) == len(batch_orig_imgs)
@@ -388,7 +438,7 @@ def main(args, model_path):
             batched_results[:valid_images_len],
             batch_image_name,
         ):
-            img_save_and_vis(i.numpy(), 
+            save_pose_results(i.numpy(), 
                              r, 
                              os.path.join(args.output, os.path.basename(img_name)), 
                              (input_shape[2], input_shape[1]), 
