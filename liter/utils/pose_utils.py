@@ -227,6 +227,7 @@ def get_udp_warp_matrix(
 
 
 def top_down_affine_transform(img, bbox, padding=1.25):
+    # TODO simplify and comment this function
     """
     Args:
         img (np.ndarray): Image to be transformed.
@@ -238,41 +239,27 @@ def top_down_affine_transform(img, bbox, padding=1.25):
         np.ndarray: Transformed bounding box.
     """
     dim = bbox.ndim
-    # print("bbox dim", dim)
-    
-    # print("bbox", bbox)
     if dim == 1:
         bbox = bbox[None, :]
-        # print("bbox", bbox)
 
     x1, y1, x2, y2 = np.hsplit(bbox, [1, 2, 3])
-    # print("x1", x1)
-    # print("y1", y1)
-    # print("x2", x2)
-    # print("y2", y2)
     center = np.hstack([x1 + x2, y1 + y2]) * 0.5
     scale = np.hstack([x2 - x1, y2 - y1]) * padding
 
     if dim == 1:
         center = center[0]
         scale = scale[0]
-        
-    # print("center", center)
-    # print("scale", scale)
 
     h, w = img.shape[:2]
-    print("h, w", h, w)
     warp_size = (int(w), int(h))
-    aspect_ratio = 768 / 1024 # @raphael changed here ! We want this aspect ratio (the model one) and not the original one
+    aspect_ratio = 768 / 1024
 
     # reshape bbox to fixed aspect ratio
     box_w, box_h = np.hsplit(scale, [1])
     scale = np.where(box_w > box_h * aspect_ratio,
                             np.hstack([box_w, box_w / aspect_ratio]),
                             np.hstack([box_h * aspect_ratio, box_h]))
-    
-    # print("scale after aspect ratio:", scale)
-    
+
     rot = 0.
 
     warp_mat = get_udp_warp_matrix(
@@ -280,8 +267,6 @@ def top_down_affine_transform(img, bbox, padding=1.25):
 
     img = cv2.warpAffine(
             img, warp_mat, warp_size, flags=cv2.INTER_LINEAR)
-    
-    print("img size after topdown affine transform:", img.shape)
 
     return img, [center], [scale]
 

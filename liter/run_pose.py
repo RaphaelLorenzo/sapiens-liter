@@ -21,8 +21,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from adhoc_image_dataset import AdhocImageDataset
-from classes_and_palettes import (
+from utils.adhoc_image_dataset import AdhocImageDataset
+from utils.classes_and_palettes import (
     COCO_KPTS_COLORS,
     COCO_WHOLEBODY_KPTS_COLORS,
     GOLIATH_KPTS_COLORS,
@@ -30,7 +30,7 @@ from classes_and_palettes import (
     COCO_SKELETON_INFO,
     COCO_WHOLEBODY_SKELETON_INFO
 )
-from pose_utils import nms, top_down_affine_transform, udp_decode
+from utils.pose_utils import nms, top_down_affine_transform, udp_decode
 
 from tqdm import tqdm
 
@@ -80,6 +80,7 @@ def crop_resize_and_normalize(orig_img, bboxes_list, input_shape, mean, std, dra
         
         # Store the extended padded bbox
         extended_padded_bboxes.append(extended_padded_bbox)
+        
         
         # Crop, resize and normalize the image
         orig_img_tensor = torch.from_numpy(orig_img).permute(2, 0, 1) # C, H, W

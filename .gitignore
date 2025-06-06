@@ -17,6 +17,6 @@ __pycache__/
 lite/sapiens_lite_host/*
 lite/demo
 lite/demo/vis_pose.py
-liter/utils/*
 liter/examples/output*
 yolo11x.pt
+liter/utils/old_save/*
